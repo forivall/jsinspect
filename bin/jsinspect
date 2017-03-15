@@ -4,7 +4,7 @@ var fs        = require('fs');
 var path      = require('path');
 var strip     = require('strip-json-comments');
 var chalk     = require('chalk');
-var filepaths = require('node-filepaths');
+var filehound = require('filehound');
 var program   = require('commander');
 var Inspector = require('../lib/inspector');
 var reporters = require('../lib/reporters');
@@ -75,12 +75,28 @@ ignorePatterns = ['node_modules', 'bower_components'];
 if (program.ignore) {
   ignorePatterns.push(program.ignore);
 }
+var ignoreRegexes = ignorePatterns.map(function (pattern) {
+  return new RegExp(pattern);
+});
+function ignoreDirectory(pathname) {
+  return ignoreRegexes.reduce(function (prev, pattern) {
+    return prev || pattern.test(pathname);
+  }, false);
+}
 
+// var fh = filehound.create().paths('.').ext('js')
+var fh = filehound.create().paths(suppliedPaths).ext(extensions.map(function (ex) {
+  return ex.replace(/^\./, '');
+}))
+var origShouldFilterDirectory = fh._shouldFilterDirectory;
+fh._shouldFilterDirectory = function (root, dir) {
+  var origFilter = origShouldFilterDirectory.call(this, root, dir);
+  return origFilter || ignoreDirectory(dir.getName());
+}
+
+var paths;
 try {
-  paths = filepaths.getSync(suppliedPaths, {
-    ext:    extensions,
-    ignore: ignorePatterns
-  });
+  paths = fh.findSync()
 } catch(e) {
   console.log(e.message);
   process.exit(4);
